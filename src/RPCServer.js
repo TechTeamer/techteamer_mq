@@ -89,6 +89,21 @@ class RPCServer {
   }
 
   /**
+   * @param channel
+   * @param msg
+   * @param [requeue=true]
+   * @private
+   */
+  _nack (channel, msg, requeue = true) {
+    if (msg.acked) {
+      this._logger.error('trying to double nack', msg)
+      return
+    }
+    channel.nack(msg, false, requeue)
+    msg.acked = true
+  }
+
+  /**
    * @param ch
    * @param msg
    * @return {Promise}
@@ -117,12 +132,19 @@ class RPCServer {
     }, timeoutMs)
 
     try {
-      const answer = await this._callback(request.data, request, response)
+      const answer = await this._callback(request.data, request, response, msg)
+
+      clearTimeout(timer)
+
+      if (request.nacked) {
+        this._nack(ch, msg, request.requeued)
+        return
+      }
+
       if (timedOut) {
         return
       }
 
-      clearTimeout(timer)
       let reply
       const replyAttachments = response.getAttachments()
       try {

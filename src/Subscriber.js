@@ -134,14 +134,22 @@ class Subscriber {
     }, timeoutMs)
 
     return Promise.resolve().then(() => {
-      return this._callback(request.data, msg.properties, request)
+      return this._callback(request.data, msg.properties, request, msg)
     }).then(() => {
-      if (!timedOut) {
-        clearTimeout(timer)
-        this._ack(channel, msg)
-        if (msg.fields && msg.fields.redelivered && msg.fields.consumerTag) {
-          this._retryMap.delete(msg.fields.consumerTag)
-        }
+      clearTimeout(timer)
+
+      if (request.nacked) {
+        this._nack(channel, msg, request.requeued)
+        return
+      }
+
+      if (timedOut) {
+        return
+      }
+
+      this._ack(channel, msg)
+      if (msg.fields && msg.fields.redelivered && msg.fields.consumerTag) {
+        this._retryMap.delete(msg.fields.consumerTag)
       }
     }).catch((err) => {
       if (!timedOut) {
